@@ -3,9 +3,12 @@
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from creditpilot import __version__
 from creditpilot.api import analyze_validation_error, router
+from creditpilot.api.web import WEB_ROOT
+from creditpilot.api.web import router as web_router
 
 app = FastAPI(
     title="CreditPilot",
@@ -13,6 +16,8 @@ app = FastAPI(
     description="AI credit risk explanation and decision-support demo.",
 )
 app.include_router(router)
+app.include_router(web_router)
+app.mount("/static", StaticFiles(directory=WEB_ROOT), name="static")
 
 
 @app.exception_handler(RequestValidationError)

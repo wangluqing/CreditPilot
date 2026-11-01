@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="CreditPilot V0.1 原创合成信贷风险解释演示">
+  <title>CreditPilot V0.1</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <header class="hero">
+    <div class="shell hero-grid">
+      <div>
+        <div class="eyebrow">CREDITPILOT · V0.1</div>
+        <h1>让模拟风险结论<br><span>清晰、可追溯、可复核</span></h1>
+        <p class="hero-copy">使用确定性规则与透明评分，解释原创合成客户的模拟策略结果。</p>
+      </div>
+      <aside class="demo-notice" aria-label="演示边界">
+        <strong>DEMO / 100% 合成数据</strong>
+        <p>非银行审批系统，不提供真实授信、额度或客户通知建议。</p>
+        <span>离线规则模式 · 无真实 LLM 调用</span>
+      </aside>
+    </div>
+  </header>
+
+  <main class="shell main-grid">
+    <section class="panel query-panel" aria-labelledby="query-title">
+      <div class="section-heading">
+        <div><span class="step">01</span><h2 id="query-title">发起模拟分析</h2></div>
+        <span class="online-dot">本地服务</span>
+      </div>
+      <form id="analysis-form" novalidate>
+        <label for="customer-id">合成客户编号</label>
+        <input id="customer-id" name="customer_id" list="demo-customers"
+               value="DEMO-0001" pattern="DEMO-[0-9]{4}" maxlength="9" required>
+        <datalist id="demo-customers">
+          <option value="DEMO-0001">基础 PASS 演示</option>
+          <option value="DEMO-0002">R001 规则演示</option>
+          <option value="DEMO-0003">R002 边界演示</option>
+          <option value="DEMO-0004">R003 边界演示</option>
+          <option value="DEMO-0005">R004 等值未命中</option>
+          <option value="DEMO-0006">R004 命中演示</option>
+        </datalist>
+        <p class="field-help">默认数据没有预置“仅评分门槛拒绝”编号；该场景仅由自动化夹具验证。</p>
+
+        <label for="question">分析问题</label>
+        <textarea id="question" name="question" rows="3" maxlength="500" required>请解释该合成客户的模拟风险结果、规则证据和评分因素。</textarea>
+
+        <label for="mode">运行模式</label>
+        <select id="mode" name="mode">
+          <option value="rules" selected>rules · 离线确定性分析</option>
+          <option value="llm" disabled>llm · 尚未启用</option>
+        </select>
+
+        <button id="submit-button" type="submit">
+          <span class="button-label">运行分析</span>
+          <span class="button-loading" hidden>正在校验证据…</span>
+        </button>
+        <p id="form-message" class="form-message" role="alert" aria-live="polite"></p>
+      </form>
+    </section>
+
+    <section id="result" class="results" aria-labelledby="result-title" hidden>
+      <div class="section-heading result-heading">
+        <div><span class="step">02</span><h2 id="result-title">结构化分析报告</h2></div>
+        <div class="report-actions">
+          <button id="copy-report" class="secondary" type="button">复制 JSON</button>
+          <button id="download-report" class="secondary" type="button">下载 JSON</button>
+        </div>
+      </div>
+
+      <div class="status-strip">
+        <div><span>分析状态</span><strong id="analysis-status">—</strong></div>
+        <div><span>模拟策略状态</span><strong id="decision-status">—</strong></div>
+        <div><span>客户编号</span><strong id="result-customer">—</strong></div>
+      </div>
+
+      <div id="result-notice" class="result-notice" hidden></div>
+
+      <div id="metric-grid" class="metric-grid">
+        <article class="metric"><span>演示评分</span><strong id="score">—</strong><small>0–1000，高分代表演示风险较低</small></article>
+        <article class="metric"><span>风险等级</span><strong id="risk-level">—</strong><small>LOW / MEDIUM / HIGH</small></article>
+        <article class="metric"><span>评分门槛</span><strong id="score-threshold">—</strong><small>独立于规则命中展示</small></article>
+        <article class="metric"><span>规则命中</span><strong id="rule-count">—</strong><small>命中数 / 规则总数</small></article>
+      </div>
+
+      <section id="explanation-section" class="panel report-panel">
+        <h3>经阶段 B 验证的中文解释</h3>
+        <p id="explanation-summary" class="lead"></p>
+        <div id="guidance" class="guidance"></div>
+      </section>
+
+      <div class="report-columns">
+        <section class="panel report-panel" aria-labelledby="policy-title">
+          <h3 id="policy-title">Policy Decision Reason</h3>
+          <p class="section-note">仅展示模拟策略实际采用的原因。</p>
+          <div id="policy-reasons" class="stack"></div>
+        </section>
+        <section class="panel report-panel" aria-labelledby="factor-title">
+          <h3 id="factor-title">Model Risk Factor</h3>
+          <p class="section-note">模型贡献不自动等同于拒绝原因。</p>
+          <div id="model-factors" class="stack"></div>
+        </section>
+      </div>
+
+      <section class="panel report-panel">
+        <h3>规则执行记录</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>规则</th><th>实际值</th><th>条件</th><th>结果</th></tr></thead>
+            <tbody id="rule-records"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <div class="report-columns">
+        <section class="panel report-panel">
+          <h3>版本与校验</h3>
+          <dl id="versions" class="key-values"></dl>
+          <div id="validation-reports" class="stack compact"></div>
+        </section>
+        <section class="panel report-panel">
+          <h3>证据引用</h3>
+          <div id="evidence-list" class="evidence-list"></div>
+        </section>
+      </div>
+
+      <details class="panel json-panel">
+        <summary>查看原始结构化 JSON</summary>
+        <pre id="raw-json"></pre>
+      </details>
+
+      <p id="disclaimer" class="disclaimer"></p>
+    </section>
+  </main>
+
+  <footer class="shell footer">CreditPilot V0.1 · 原创合成数据与虚构演示参数</footer>
+</body>
+</html>
