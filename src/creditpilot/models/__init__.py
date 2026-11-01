@@ -8,6 +8,12 @@ from creditpilot.models.customer import (
     SyntheticDataset,
     SyntheticDatasetManifest,
 )
+from creditpilot.models.decision import (
+    AnalysisStatus,
+    DecisionStatus,
+    StructuredDecisionResult,
+    ValidationReport,
+)
 from creditpilot.models.risk import (
     DEMO_MODEL_VERSION,
     DEMO_RULE_VERSION,
@@ -16,14 +22,18 @@ from creditpilot.models.risk import (
 )
 
 __all__ = [
-    "DATA_VERSION",
-    "GENERATOR_SEED",
-    "SCHEMA_VERSION",
+    "AnalysisStatus",
     "CustomerRecord",
+    "DATA_VERSION",
+    "DecisionStatus",
     "DEMO_MODEL_VERSION",
     "DEMO_RULE_VERSION",
+    "GENERATOR_SEED",
     "RiskModelResult",
     "RuleEngineResult",
+    "SCHEMA_VERSION",
+    "StructuredDecisionResult",
     "SyntheticDataset",
     "SyntheticDatasetManifest",
+    "ValidationReport",
 ]
