@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "AI credit risk explanation and decision-support demo"
 readme = "README.md"
 authors = [
-    { name = "wangluqing", email = "wangluqing360@163.com" }
+    { name = "Jack Wang" }
 ]
 requires-python = ">=3.11,<3.12"
 dependencies = [
