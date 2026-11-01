@@ -18,9 +18,11 @@ from creditpilot.models.decision import (
     DecisionStatus,
     ValidationReportStatus,
 )
+from creditpilot.models.explanation import StageBValidationReport
 from creditpilot.tools.customer import CustomerTool
 from creditpilot.tools.decision import DecisionTool
 from creditpilot.tools.evidence import EvidenceValidator
+from creditpilot.tools.explanation import FixedTemplateEngine
 from creditpilot.tools.risk_model import RiskModelTool
 from creditpilot.tools.rules import RuleEngineTool
 
@@ -36,12 +38,14 @@ class AnalysisOrchestrator:
         model_tool: RiskModelTool | None = None,
         validator: EvidenceValidator | None = None,
         decision_tool: DecisionTool | None = None,
+        template_engine: FixedTemplateEngine | None = None,
     ) -> None:
         self._customers = customer_tool
         self._rules = rule_tool or RuleEngineTool()
         self._model = model_tool or RiskModelTool()
         self._validator = validator or EvidenceValidator()
         self._decision = decision_tool or DecisionTool()
+        self._templates = template_engine or FixedTemplateEngine()
 
     @classmethod
     def from_default_dataset(cls) -> "AnalysisOrchestrator":
@@ -117,6 +121,11 @@ class AnalysisOrchestrator:
                     strategy_version=STRATEGY_VERSION,
                 ),
                 evidence_references=report.evidence_references,
+                explanation=self._templates.render_review(
+                    snapshot.customer_id,
+                    DecisionStatus.NEEDS_REVIEW,
+                    "DEPENDENCY_NOT_VALIDATED",
+                ),
                 validation_reports=(
                     ValidationSummary(
                         report_id=report.report_id,
@@ -146,6 +155,20 @@ class AnalysisOrchestrator:
                 "required deterministic decision tool failed",
                 data_version=snapshot.data_version,
             )
+        try:
+            candidate_explanation = self._templates.render(decision, rules, model)
+            stage_b = self._validator.validate_stage_b(
+                candidate_explanation, report, decision, rules, model
+            )
+        except Exception:
+            candidate_explanation = None
+            stage_b = StageBValidationReport(
+                report_id="VR-B-RENDER-FAILED",
+                status="INCONSISTENT",
+                issue_codes=("EXPLANATION_UNSUPPORTED",),
+                blocked_output="CANDIDATE_EXPLANATION",
+            )
+        explanation_valid = stage_b.status == "CONSISTENT"
         score_evidence = tuple(
             item.evidence_id
             for item in model.evidence
@@ -170,12 +193,22 @@ class AnalysisOrchestrator:
             else None
         )
         error_code = decision.error_code.value if decision.error_code else None
+        if not explanation_valid:
+            error_code = "EXPLANATION_UNSUPPORTED"
         errors = (
             (
                 AnalysisError(
                     code=error_code,
-                    message="required deterministic evidence was not validated",
-                    source="DecisionTool",
+                    message=(
+                        "candidate explanation failed deterministic validation"
+                        if error_code == "EXPLANATION_UNSUPPORTED"
+                        else "required deterministic evidence was not validated"
+                    ),
+                    source=(
+                        "EvidenceValidator"
+                        if error_code == "EXPLANATION_UNSUPPORTED"
+                        else "DecisionTool"
+                    ),
                 ),
             )
             if error_code
@@ -186,6 +219,12 @@ class AnalysisOrchestrator:
             status=report.status.value,
             issue_codes=tuple(issue.error_code.value for issue in report.issues),
         )
+        stage_b_summary = ValidationSummary(
+            report_id=stage_b.report_id,
+            stage="B",
+            status=stage_b.status,
+            issue_codes=stage_b.issue_codes,
+        )
         versions = AnalysisVersions(
             data_version=snapshot.data_version,
             rule_version=rules.rule_version,
@@ -194,7 +233,11 @@ class AnalysisOrchestrator:
         )
         return AnalyzeResponse(
             request_id=correlation_id,
-            analysis_status=decision.analysis_status,
+            analysis_status=(
+                decision.analysis_status
+                if explanation_valid
+                else AnalysisStatus.PARTIAL
+            ),
             decision_status=decision.decision_status,
             customer_id=snapshot.customer_id,
             data_version=snapshot.data_version,
@@ -215,8 +258,9 @@ class AnalysisOrchestrator:
             policy_decision_reasons=decision.policy_reasons,
             model_risk_factors=decision.model_risk_factors,
             business_guidance=decision.business_guidance,
+            explanation=candidate_explanation if explanation_valid else None,
             evidence_references=decision.evidence_references,
-            validation_reports=(summary,),
+            validation_reports=(summary, stage_b_summary),
             errors=errors,
             error_code=error_code,
         )
@@ -238,6 +282,11 @@ class AnalysisOrchestrator:
             customer_id=customer_id,
             data_version=data_version,
             versions=AnalysisVersions(data_version=data_version),
+            explanation=FixedTemplateEngine().render_review(
+                customer_id,
+                DecisionStatus.NOT_EVALUATED,
+                error_code,
+            ),
             errors=(
                 AnalysisError(
                     code=error_code,

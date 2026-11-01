@@ -39,6 +39,8 @@ def test_analyze_pass_response_contract() -> None:
     assert body["score_policy"]["pass_threshold_met"] is True
     assert body["score_policy"]["condition_triggered"] is False
     assert body["policy_reasons"] == []
+    assert "未触发模拟拒绝规则" in body["explanation"]["summary"]
+    assert [item["stage"] for item in body["validation_reports"]] == ["A", "B"]
     assert "real credit approval" in body["disclaimer"]
 
 
@@ -122,6 +124,10 @@ def test_customer_not_found_returns_404_without_decision() -> None:
         "NOT_EVALUATED",
     )
     assert body["error_code"] == "CUSTOMER_NOT_FOUND"
+    assert body["explanation"]["decision_status"] == "NOT_EVALUATED"
+    assert "未执行模拟分析" in body["explanation"]["summary"]
+    assert "PASS" not in body["explanation"]["summary"]
+    assert "REJECT" not in body["explanation"]["summary"]
 
 
 def test_llm_mode_is_explicitly_unavailable() -> None:

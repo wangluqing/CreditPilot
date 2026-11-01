@@ -10,9 +10,14 @@ from creditpilot.models.customer import CustomerRecord
 from creditpilot.models.decision import (
     EvidenceReference,
     EvidenceStatus,
+    StructuredDecisionResult,
     ValidationIssue,
     ValidationReport,
     ValidationReportStatus,
+)
+from creditpilot.models.explanation import (
+    StageBValidationReport,
+    StructuredExplanation,
 )
 from creditpilot.models.risk import (
     DEMO_MODEL_VERSION,
@@ -186,6 +191,56 @@ class EvidenceValidator:
             blocked_conclusions=("PASS", "REJECT") if issues else (),
         )
         return _register_report(report)
+
+    def validate_stage_b(
+        self,
+        candidate: StructuredExplanation,
+        stage_a_report: ValidationReport,
+        decision: StructuredDecisionResult,
+        rule_result: RuleEngineResult,
+        model_result: RiskModelResult,
+    ) -> StageBValidationReport:
+        """Validate a whitelisted structured explanation without repairing it."""
+
+        from creditpilot.tools.explanation import FixedTemplateEngine
+
+        if not isinstance(decision, StructuredDecisionResult):
+            raise TypeError("decision must use the frozen structured contract")
+
+        issues: list[str] = []
+        if (
+            not is_stage_a_report_issued(stage_a_report)
+            or stage_a_report.status is not ValidationReportStatus.CONSISTENT
+        ):
+            issues.append("DEPENDENCY_NOT_VALIDATED")
+        expected = FixedTemplateEngine().render(decision, rule_result, model_result)
+        if candidate != expected:
+            issues.append("EXPLANATION_UNSUPPORTED")
+        validated_ids = set(stage_a_report.validated_evidence_ids)
+        if not set(candidate.evidence_ids) <= validated_ids:
+            issues.append("EVIDENCE_SOURCE_INVALID")
+        cited_ids = {
+            evidence_id
+            for item in (
+                *candidate.policy_decision_reasons,
+                *candidate.model_risk_factors,
+            )
+            for evidence_id in item.evidence_ids
+        }
+        if cited_ids != set(candidate.evidence_ids):
+            issues.append("EVIDENCE_MISSING")
+        issue_codes = tuple(dict.fromkeys(issues))
+        seed = {
+            "stage_a_report_id": stage_a_report.report_id,
+            "candidate": candidate.model_dump(mode="json"),
+            "issues": issue_codes,
+        }
+        return StageBValidationReport(
+            report_id=f"VR-B-{_canonical_digest(seed)[:16]}",
+            status="INCONSISTENT" if issue_codes else "CONSISTENT",
+            issue_codes=issue_codes,
+            blocked_output=("CANDIDATE_EXPLANATION" if issue_codes else "NONE"),
+        )
 
     @staticmethod
     def _validate_customer_evidence(

@@ -14,6 +14,7 @@ from creditpilot.models.decision import (
     EvidenceReference,
     PolicyDecisionReason,
 )
+from creditpilot.models.explanation import ReviewExplanation, StructuredExplanation
 from creditpilot.models.risk import ModelRiskFactor, RiskLevel, RuleExecution
 
 CONTRACT_VERSION = "analysis-contract-v1"
@@ -82,7 +83,7 @@ class ValidationSummary(BaseModel):
     model_config = ConfigDict(frozen=True, strict=True)
 
     report_id: str
-    stage: Literal["A"] = "A"
+    stage: Literal["A", "B"] = "A"
     status: str
     issue_codes: tuple[str, ...]
 
@@ -116,6 +117,7 @@ class AnalyzeResponse(BaseModel):
     policy_decision_reasons: tuple[PolicyDecisionReason, ...] = ()
     model_risk_factors: tuple[ModelRiskFactor, ...] = ()
     business_guidance: BusinessGuidanceContract | None = None
+    explanation: StructuredExplanation | ReviewExplanation | None = None
     evidence_references: tuple[EvidenceReference, ...] = ()
     validation_reports: tuple[ValidationSummary, ...] = ()
     errors: tuple[AnalysisError, ...] = ()

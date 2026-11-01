@@ -77,7 +77,7 @@ class DecisionTool:
                 )
                 guidance.append(RULE_GUIDANCE[execution.rule_id])
 
-        if not reasons and model_result.score is not None and model_result.score < 500:
+        if model_result.score is not None and model_result.score < 500:
             score_evidence = tuple(
                 item.evidence_id
                 for item in model_result.evidence
